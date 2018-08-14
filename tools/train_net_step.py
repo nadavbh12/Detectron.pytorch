@@ -22,6 +22,7 @@ import nn as mynn
 import utils.net as net_utils
 import utils.misc as misc_utils
 from core.config import cfg, cfg_from_file, cfg_from_list, assert_and_infer_cfg
+from core.test_engine import run_inference
 from datasets.roidb import combined_roidb_for_training
 from roi_data.loader import RoiDataLoader, MinibatchSampler, BatchSampler, collate_minibatch
 from modeling.model_builder import Generalized_RCNN
@@ -116,6 +117,21 @@ def parse_args():
         '--use_tfboard', help='Use tensorflow tensorboard to log training info',
         action='store_true')
 
+    parser.add_argument(
+        '--output_dir',
+        help='output directory to save the testing results. If not provided, '
+             'defaults to [args.load_ckpt|args.load_detectron]/../test.')
+
+    parser.add_argument(
+        '--range',
+        help='start (inclusive) and end (exclusive) indices',
+        type=int, nargs=2)
+    parser.add_argument(
+        '--multi-gpu-testing', help='using multiple gpus for inference',
+        action='store_true')
+    parser.add_argument(
+        '--vis', dest='vis', help='visualize detections', action='store_true')
+
     return parser.parse_args()
 
 
@@ -159,18 +175,22 @@ def main():
 
     if args.dataset == "coco2017":
         cfg.TRAIN.DATASETS = ('coco_2017_train',)
+        cfg.TEST.DATASETS = ('coco_2017_val',)
         cfg.MODEL.NUM_CLASSES = 81
     elif args.dataset == "keypoints_coco2017":
         cfg.TRAIN.DATASETS = ('keypoints_coco_2017_train',)
+        cfg.TEST.DATASETS = ('keypoints_coco_2017_val',)
         cfg.MODEL.NUM_CLASSES = 2
     elif args.dataset == "voc2007":
         cfg.TRAIN.DATASETS = ('voc_2007_train',)
+        cfg.TEST.DATASETS = ('voc_2007_test',)
         cfg.MODEL.NUM_CLASSES = 21
     elif args.dataset == "voc2012":
         cfg.TRAIN.DATASETS = ('voc_2012_train',)
         cfg.MODEL.NUM_CLASSES = 21
     elif args.dataset == "custom_dataset":
         cfg.TRAIN.DATASETS = ('custom_data_train',)
+        cfg.TEST.DATASETS = ('custom_data_trainval',)
         cfg.MODEL.NUM_CLASSES = args.num_classes
     else:
         raise ValueError("Unexpected args.dataset: {}".format(args.dataset))
@@ -178,6 +198,11 @@ def main():
     cfg_from_file(args.cfg_file)
     if args.set_cfgs is not None:
         cfg_from_list(args.set_cfgs)
+
+    cfg.VIS = args.vis
+    # For test_engine.multi_gpu_test_net_on_dataset
+    args.test_net_file, _ = os.path.splitext(__file__)
+    # manually set args.cuda
 
     ### Adaptively adjust some configs ###
     original_batch_size = cfg.NUM_GPUS * cfg.TRAIN.IMS_PER_BATCH
@@ -358,6 +383,7 @@ def main():
     args.run_name = misc_utils.get_run_name() + '_step'
     output_dir = misc_utils.get_output_dir(args, args.run_name)
     args.cfg_filename = os.path.basename(args.cfg_file)
+    args.output_dir = output_dir
 
     if not args.no_save:
         if not os.path.exists(output_dir):
@@ -448,6 +474,15 @@ def main():
 
             if (step+1) % CHECKPOINT_PERIOD == 0:
                 save_ckpt(output_dir, args, step, train_size, maskRCNN, optimizer)
+                maskRCNN.module.eval()
+                results = run_inference(
+                    args,
+                    ind_range=args.range,
+                    multi_gpu_testing=args.multi_gpu_testing,
+                    check_expected_results=True,
+                    model=maskRCNN)
+                maskRCNN.module.train()
+                training_stats.UpdateValStats(results, epoch=step)
 
         # ---- Training ends ----
         # Save last checkpoint

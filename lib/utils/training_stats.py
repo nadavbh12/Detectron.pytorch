@@ -57,6 +57,7 @@ class TrainingStats(object):
             self.inner_loss_rpn_cls = []
             self.inner_loss_rpn_bbox = []
         self.inner_metrics = defaultdict(list)
+        self.AP = self.AP50 = self.AP75 = self.APs = self.APm = self.APl = None
 
     def IterTic(self):
         self.iter_timer.tic()
@@ -171,6 +172,14 @@ class TrainingStats(object):
             mean_val = sum(getattr(self, attr_name)) / self.misc_args.iter_size
             setattr(self, attr_name, [])
         return mean_val
+
+    def UpdateValStats(self, results, epoch):
+        results_dict = list(results.items())[0][1]
+        if self.tblogger:
+            for k, v in results_dict['box'].items():
+                self.tblogger.add_scalar('box.' + k, v, epoch)
+            for k, v in results_dict['mask'].items():
+                self.tblogger.add_scalar('mask.' + k, v, epoch)
 
     def LogIterStats(self, cur_iter, lr):
         """Log the tracked statistics."""

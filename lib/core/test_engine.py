@@ -86,7 +86,8 @@ def get_inference_dataset(index, is_parent=True):
 def run_inference(
         args, ind_range=None,
         multi_gpu_testing=False, gpu_id=0,
-        check_expected_results=False):
+        check_expected_results=False,
+        model=None):
     parent_func, child_func = get_eval_functions()
     is_parent = ind_range is None
 
@@ -105,7 +106,8 @@ def run_inference(
                     dataset_name,
                     proposal_file,
                     output_dir,
-                    multi_gpu=multi_gpu_testing
+                    multi_gpu=multi_gpu_testing,
+                    model=model,
                 )
                 all_results.update(results)
 
@@ -122,7 +124,8 @@ def run_inference(
                 proposal_file,
                 output_dir,
                 ind_range=ind_range,
-                gpu_id=gpu_id
+                gpu_id=gpu_id,
+                model=model,
             )
 
     all_results = result_getter()
@@ -143,7 +146,8 @@ def test_net_on_dataset(
         proposal_file,
         output_dir,
         multi_gpu=False,
-        gpu_id=0):
+        gpu_id=0,
+        model=None):
     """Run inference on a dataset."""
     dataset = JsonDataset(dataset_name)
     test_timer = Timer()
@@ -155,7 +159,7 @@ def test_net_on_dataset(
         )
     else:
         all_boxes, all_segms, all_keyps = test_net(
-            args, dataset_name, proposal_file, output_dir, gpu_id=gpu_id
+            args, dataset_name, proposal_file, output_dir, gpu_id=gpu_id, model=model,
         )
     test_timer.toc()
     logger.info('Total inference time: {:.3f}s'.format(test_timer.average_time))
@@ -219,7 +223,8 @@ def test_net(
         proposal_file,
         output_dir,
         ind_range=None,
-        gpu_id=0):
+        gpu_id=0,
+        model=None):
     """Run inference on all images in a dataset or over an index range of images
     in a dataset using a single GPU.
     """
@@ -229,7 +234,8 @@ def test_net(
     roidb, dataset, start_ind, end_ind, total_num_images = get_roidb_and_dataset(
         dataset_name, proposal_file, ind_range
     )
-    model = initialize_model_from_cfg(args, gpu_id=gpu_id)
+    if model is None:
+        model = initialize_model_from_cfg(args, gpu_id=gpu_id)
     num_images = len(roidb)
     num_classes = cfg.MODEL.NUM_CLASSES
     all_boxes, all_segms, all_keyps = empty_results(num_classes, num_images)

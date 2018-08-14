@@ -148,7 +148,7 @@ class Generalized_RCNN(nn.Module):
         if self.training:
             roidb = list(map(lambda x: blob_utils.deserialize(x)[0], roidb))
 
-        device_id = im_data.get_device()
+        # device_id = im_data.get_device()
 
         return_dict = {}  # A dict to collect return variables
 
